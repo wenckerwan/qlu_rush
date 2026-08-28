@@ -1,0 +1,15 @@
+# 依赖与缓存
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# 运行时数据（用户账号、配置、Cookie）—— 切勿提交！
+web_server/data/
+config.json
+
+# 本地部署产物
+*.zip
+build/
+dist/
+*.spec

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QLU 抢课控制台</title>
+<style>
+  :root {
+    --blue-50:#eff6ff; --blue-100:#dbeafe; --blue-200:#bfdbfe;
+    --blue-300:#93c5fd; --blue-400:#60a5fa; --blue-500:#3b82f6;
+    --blue-600:#2563eb; --blue-700:#1d4ed8; --blue-800:#1e40af; --blue-900:#1e3a8a;
+    --ink:#0f172a; --ink-2:#334155; --ink-3:#64748b; --ink-4:#94a3b8;
+    --line:#e2e8f0; --bg:#f1f5ff;
+    --ok:#059669; --ok-bg:#d1fae5; --warn:#b45309; --warn-bg:#fef3c7;
+    --err:#dc2626; --err-bg:#fee2e2;
+    --shadow:0 1px 2px rgba(15,23,42,.05), 0 4px 16px rgba(37,99,235,.06);
+    --shadow-lg:0 8px 30px rgba(37,99,235,.14);
+    --radius:14px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-font-smoothing:antialiased; }
+  body {
+    font:14px/1.6 "PingFang SC","Microsoft YaHei",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:
+      radial-gradient(1100px 500px at 85% -10%, rgba(96,165,250,.18), transparent 60%),
+      radial-gradient(900px 460px at -10% 0%, rgba(29,78,216,.12), transparent 55%),
+      var(--bg);
+    color:var(--ink); min-height:100vh;
+  }
+  h1 { font-size:19px; letter-spacing:.2px; }
+  h2 { font-size:15px; color:var(--ink); display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .step-badge {
+    width:26px; height:26px; border-radius:8px; flex:none;
+    background:linear-gradient(135deg,var(--blue-500),var(--blue-700));
+    color:#fff; font-size:13px; font-weight:700;
+    display:inline-flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 8px rgba(37,99,235,.35);
+  }
+  input, select, textarea {
+    width:100%; background:#f8fafc; color:var(--ink); border:1px solid var(--line);
+    border-radius:10px; padding:9px 12px; font-size:13px; outline:none;
+    transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  input:focus, textarea:focus { border-color:var(--blue-500); box-shadow:0 0 0 3px rgba(59,130,246,.15); background:#fff; }
+  input::placeholder, textarea::placeholder { color:var(--ink-4); }
+  textarea { resize:vertical; font-family:Consolas,"SFMono-Regular",monospace; font-size:12px; }
+  label { display:block; font-size:12px; color:var(--ink-3); margin-bottom:6px; font-weight:500; }
+  .field { margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:0 18px; }
+  .wide { grid-column:1 / -1; }
+  button {
+    background:#fff; color:var(--ink-2); border:1px solid var(--line);
+    border-radius:10px; padding:9px 18px; font-size:13px; font-weight:600; cursor:pointer;
+    transition:all .15s; display:inline-flex; align-items:center; gap:6px; justify-content:center;
+  }
+  button:hover { border-color:var(--blue-400); color:var(--blue-600); background:var(--blue-50); }
+  button:active { transform:translateY(1px); }
+  button:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+  button.primary {
+    background:linear-gradient(135deg,var(--blue-500),var(--blue-700)); color:#fff;
+    border:none; box-shadow:0 4px 12px rgba(37,99,235,.35);
+  }
+  button.primary:hover { filter:brightness(1.08); color:#fff; background:linear-gradient(135deg,var(--blue-500),var(--blue-700)); }
+  button.danger {
+    background:#fff; color:var(--err); border:1px solid #fecaca;
+  }
+  button.danger:hover { background:var(--err-bg); border-color:var(--err); color:var(--err); }
+  button.ghost { background:transparent; border-color:transparent; color:var(--ink-3); }
+  button.ghost:hover { background:var(--blue-50); color:var(--blue-600); }
+
+  /* 顶栏 */
+  .topbar {
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:14px 26px; background:rgba(255,255,255,.86); backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(226,232,240,.8); position:sticky; top:0; z-index:50;
+  }
+  .logo {
+    display:inline-flex; align-items:center; gap:10px; font-weight:800; font-size:17px; color:var(--blue-700);
+  }
+  .logo-mark {
+    width:34px; height:34px; border-radius:10px;
+    background:linear-gradient(135deg,#60a5fa,#1d4ed8);
+    display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:18px;
+    box-shadow:0 4px 12px rgba(37,99,235,.4);
+  }
+  .userbar { margin-left:auto; display:flex; align-items:center; gap:12px; font-size:13px; color:var(--ink-3); }
+  .user-chip {
+    background:var(--blue-50); border:1px solid var(--blue-200); color:var(--blue-700);
+    padding:5px 12px; border-radius:999px; font-weight:600;
+  }
+  #globalInfo { color:var(--ink-4); font-size:12px; }
+
+  /* 运行栏 */
+  .runbar {
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    margin:20px auto 0; max-width:1060px; padding:14px 20px;
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
+  }
+  .state-pill {
+    display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:14px;
+    padding:7px 14px; border-radius:999px; background:#f1f5f9; color:var(--ink-3);
+  }
+  .state-pill .dot { width:9px; height:9px; border-radius:50%; background:var(--ink-4); }
+  .state-pill.running { background:var(--ok-bg); color:var(--ok); }
+  .state-pill.running .dot { background:var(--ok); animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .btns { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
+
+  main { max-width:1060px; margin:0 auto; padding:20px 20px 60px; }
+  .card {
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 22px; margin-bottom:18px; box-shadow:var(--shadow);
+  }
+  .card:last-child { margin-bottom:0; }
+
+  .hint {
+    display:flex; gap:12px; align-items:flex-start;
+    background:linear-gradient(135deg,var(--blue-50),#f8fbff);
+    border:1px solid var(--blue-200); border-left:4px solid var(--blue-500);
+    border-radius:12px; padding:14px 16px; font-size:12.5px; color:var(--ink-2);
+    margin-bottom:18px; white-space:pre-line; line-height:1.8;
+  }
+  .hint .icon { font-size:16px; line-height:1.6; }
+
+  /* 统计卡片 */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:4px; }
+  .stat {
+    background:linear-gradient(180deg,#fff,var(--blue-50));
+    border:1px solid var(--blue-100); border-radius:12px; padding:12px 14px; text-align:center;
+  }
+  .stat .num { font-size:22px; font-weight:800; color:var(--blue-700); line-height:1.2; }
+  .stat .num.ok { color:var(--ok); } .stat .num.err { color:var(--err); }
+  .stat .lab { font-size:12px; color:var(--ink-3); margin-top:2px; }
+
+  /* 日志 */
+  #logs {
+    background:#0b1526; border:1px solid #1e2a44; border-radius:12px;
+    height:300px; overflow-y:auto; padding:12px 14px;
+    font:12px/1.8 Consolas,"SFMono-Regular",monospace;
+  }
+  .log-line { word-break:break-all; white-space:pre-wrap; }
+  .log-ts { color:#5b6b8c; margin-right:10px; user-select:none; }
+  .log-info { color:#9fb3d1; }
+  .log-warn { color:#fbbf24; }
+  .log-error { color:#f87171; }
+  .log-success { color:#34d399; }
+
+  /* 复选框 */
+  .cb { display:flex; align-items:center; gap:10px; padding:8px 0; }
+  .cb input { width:auto; accent-color:var(--blue-600); cursor:pointer; }
+  .cb label { margin:0; color:var(--ink-2); font-size:13px; cursor:pointer; }
+
+  /* 登录页 */
+  #loginViewWrap {
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    background:
+      radial-gradient(800px 420px at 20% 15%, rgba(59,130,246,.22), transparent 60%),
+      radial-gradient(700px 400px at 85% 85%, rgba(30,64,175,.18), transparent 55%),
+      linear-gradient(160deg,#eff6ff,#dbeafe 55%,#bfdbfe);
+  }
+  #loginView {
+    width:100%; max-width:410px; background:#fff; border-radius:20px;
+    box-shadow:0 24px 60px rgba(30,64,175,.22); padding:34px 32px 30px;
+    border:1px solid rgba(255,255,255,.7);
+  }
+  #loginView .logo { justify-content:center; margin-bottom:6px; }
+  #loginView .sub { text-align:center; color:var(--ink-3); font-size:13px; margin-bottom:22px; }
+  .tabs {
+    display:flex; gap:6px; padding:4px; background:#f1f5f9; border-radius:12px; margin-bottom:20px;
+  }
+  .tabs button { flex:1; border:none; background:transparent; border-radius:9px; padding:8px 0; font-weight:600; }
+  .tabs button.active { background:#fff; color:var(--blue-700); box-shadow:0 2px 6px rgba(15,23,42,.08); }
+  #loginView button[type="submit"] { width:100%; margin-top:8px; padding:11px; font-size:14px; }
+
+  /* Toast */
+  .toast {
+    position:fixed; top:20px; right:20px; z-index:99; max-width:440px;
+    background:#fff; border:1px solid var(--blue-200); border-left:4px solid var(--blue-500);
+    border-radius:12px; padding:12px 18px; font-size:13px; color:var(--ink);
+    box-shadow:0 12px 32px rgba(15,23,42,.18); display:none;
+  }
+  .toast.show { display:block; animation:slideIn .25s ease; }
+  .toast.ok { border-left-color:var(--ok); }
+  .toast.err { border-left-color:var(--err); }
+  @keyframes slideIn { from { opacity:0; transform:translateX(16px);} to {opacity:1; transform:none;} }
+
+  @media (max-width:640px) {
+    .btns { margin-left:0; width:100%; }
+    .btns button { flex:1; }
+    .runbar { margin-top:14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loginViewWrap">
+  <div id="loginView">
+    <div class="logo"><span class="logo-mark">🧲</span>QLU 抢课控制台</div>
+    <div class="sub">多用户版 · 登录后配置自己的 Cookie 与课程</div>
+    <div class="tabs">
+      <button id="tabLogin" class="active">登 录</button>
+      <button id="tabReg">注 册</button>
+    </div>
+    <form id="loginForm">
+      <div class="field"><label>用户名</label><input id="loginUser" autocomplete="username" placeholder="输入用户名"></div>
+      <div class="field"><label>密码</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="输入密码"></div>
+      <button class="primary" type="submit">登 录</button>
+    </form>
+    <form id="regForm" style="display:none">
+      <div class="field"><label>用户名（2-20 位字母/数字/下划线）</label><input id="regUser" autocomplete="username" placeholder="例如 zhangsan"></div>
+      <div class="field"><label>密码（至少 6 位）</label><input id="regPass" type="password" autocomplete="new-password" placeholder="设置密码"></div>
+      <button class="primary" type="submit">注 册 并 登 录</button>
+    </form>
+  </div>
+</div>
+
+<div id="mainView" hidden>
+  <header class="topbar">
+    <div class="logo"><span class="logo-mark">🧲</span>QLU 抢课控制台</div>
+    <div class="userbar">
+      <span id="globalInfo"></span>
+      <span class="user-chip" id="whoami"></span>
+      <button class="ghost" id="logoutBtn">退出</button>
+    </div>
+  </header>
+
+  <div class="runbar">
+    <span class="state-pill" id="runState"><span class="dot"></span>未连接</span>
+    <button id="saveBtn">💾 保存配置</button>
+    <button id="testBtn">🧪 测试连接</button>
+    <div class="btns">
+      <button id="startBtn" class="primary">▶ 开始抢课</button>
+      <button id="stopBtn" class="danger" disabled>⏹ 停止</button>
+    </div>
+  </div>
+
+  <main>
+    <div class="hint">
+      <span class="icon">💡</span><span>使用前先 F12 抓包：登录教务选课页 → 网络(Network) → 找到选课请求 →
+① 请求头 Cookie 里的 JSESSIONID　② 表单里的 jxb_ids / kch_id / xkkz_id / njdm_id / zyh_id / kklxdm 填到下方。
+注意：选课用与查询用的 jxb_ids 必须是【同一个教学班】，避免旧脚本那样两个 ID 不一致。</span>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">1</span>会话配置</h2>
+      <div class="grid">
+        <div class="field"><label>教务地址 base_url</label><input name="base_url" placeholder="https://jw.qlu.edu.cn"></div>
+        <div class="field"><label>JSESSIONID Cookie（仅存服务器数据目录，日志不回显）</label><input name="cookie" type="password" placeholder="粘贴 Cookie 中的 JSESSIONID"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">2</span>选课参数（从抓包复制）</h2>
+      <div class="grid">
+        <div class="field"><label>学年 xkxnm</label><input name="xkxnm" placeholder="2025"></div>
+        <div class="field"><label>学期 xkxqm</label><input name="xkxqm" placeholder="3"></div>
+        <div class="field"><label>选课批次 xkkz_id</label><input name="xkkz_id"></div>
+        <div class="field"><label>年级 njdm_id</label><input name="njdm_id"></div>
+        <div class="field"><label>专业 zyh_id</label><input name="zyh_id"></div>
+        <div class="field"><label>课程类别 kklxdm</label><input name="kklxdm" placeholder="10"></div>
+        <div class="field"><label>课程号 kch_id</label><input name="kch_id"></div>
+        <div class="field"><label>课程名 kcmc（选填）</label><input name="kcmc"></div>
+        <div class="field wide"><label>教学班编码 jxb_ids（128 位加密串，整串粘贴）</label><textarea name="jxb_ids" rows="2"></textarea></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">3</span>高级参数（保持默认即可）</h2>
+      <div class="grid">
+        <div class="field"><label>任务类型 rwlx</label><input name="rwlx"></div>
+        <div class="field"><label>容量控制 rlkz</label><input name="rlkz"></div>
+        <div class="field"><label>容量控制2 rlzlkz</label><input name="rlzlkz"></div>
+        <div class="field"><label>性别标记 sxbj</label><input name="sxbj"></div>
+        <div class="field"><label>选修课标记 xxkbj</label><input name="xxkbj"></div>
+        <div class="field"><label>权重 qz</label><input name="qz"></div>
+        <div class="field"><label>重修标记 cxbj</label><input name="cxbj"></div>
+        <div class="field"><label>修读层次 xklc</label><input name="xklc"></div>
+        <div class="field"><label>班级 bj（状态查询用）</label><input name="bj"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">4</span>抢课策略</h2>
+      <div class="grid">
+        <div class="field"><label>请求间隔（毫秒，防封建议 ≥100）</label><input name="interval_ms" type="number" min="30"></div>
+        <div class="field"><label>并发数（建议 1-3）</label><input name="concurrency" type="number" min="1" max="8"></div>
+        <div class="field"><label>单请求超时（秒）</label><input name="timeout" type="number" min="3" max="30"></div>
+        <div class="field"><label>定时启动（空=立即；格式 2025-09-01 12:00:00）</label><input name="start_at" placeholder="留空立即开始"></div>
+      </div>
+      <div class="cb"><input name="stop_on_success" type="checkbox" checked><label>抢到即自动停止</label></div>
+      <div class="cb"><input name="query_each_round" type="checkbox"><label>每轮同时查询课程状态（多一倍请求，默认关）</label></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">5</span>实时状态与日志</h2>
+      <div class="stats">
+        <div class="stat"><div class="num" id="stAttempts">0</div><div class="lab">请求次数</div></div>
+        <div class="stat"><div class="num ok" id="stSuccess">0</div><div class="lab">抢课成功</div></div>
+        <div class="stat"><div class="num err" id="stError">0</div><div class="lab">异常次数</div></div>
+        <div class="stat"><div class="num" id="stTime">-</div><div class="lab">开始时间</div></div>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:var(--ink-3)" id="statText"></div>
+      <div id="logs" style="margin-top:10px"><div class="log-line log-info">等待任务…</div></div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const TOKEN_KEY = "qlu_token";
+let token = localStorage.getItem(TOKEN_KEY) || "";
+let lastLogId = 0;
+let statusTimer = null, logTimer = null;
+const $ = s => document.querySelector(s);
+
+/* ---------- API ---------- */
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const res = await fetch(path, {
+    method: opts.method || "GET",
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { }
+  if (res.status === 401) { showToast("登录已过期，请重新登录", "err"); showLogin(); throw new Error("unauthorized"); }
+  if (!res.ok) throw new Error((data && data.detail) || ("HTTP " + res.status));
+  return data;
+}
+
+let toastTimer = null;
+function showToast(msg, type = "") {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "toast show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = "toast"; }, 4200);
+}
+
+/* ---------- 表单 ---------- */
+function readForm() {
+  const o = {};
+  document.querySelectorAll("#mainView [name]").forEach(el => {
+    const n = el.name;
+    if (el.type === "checkbox") o[n] = el.checked;
+    else o[n] = el.value.trim();
+  });
+  o.interval_ms = parseInt(o.interval_ms, 10) || 100;
+  o.concurrency = parseInt(o.concurrency, 10) || 1;
+  o.timeout = parseInt(o.timeout, 10) || 10;
+  return o;
+}
+function fillForm(cfg) {
+  document.querySelectorAll("#mainView [name]").forEach(el => {
+    const n = el.name;
+    if (n in cfg) {
+      if (n === "cookie") { el.value = ""; return; } // 安全：cookie 不回填显示
+      if (el.type === "checkbox") el.checked = !!cfg[n];
+      else el.value = cfg[n];
+    }
+  });
+}
+
+/* ---------- 登录/注册 ---------- */
+function showLogin() {
+  token = ""; localStorage.removeItem(TOKEN_KEY);
+  $("#mainView").hidden = true; $("#loginViewWrap").style.display = "flex";
+}
+function showMain() { $("#loginViewWrap").style.display = "none"; $("#mainView").hidden = false; }
+async function doLogin() {
+  const data = await api("/api/login", { method: "POST", body: { username: $("#loginUser").value.trim(), password: $("#loginPass").value } });
+  token = data.token; localStorage.setItem(TOKEN_KEY, token);
+  showMain(); await boot();
+}
+async function doRegister() {
+  const username = $("#regUser").value.trim(), password = $("#regPass").value;
+  await api("/api/register", { method: "POST", body: { username, password } });
+  showToast("注册成功，已自动登录", "ok");
+  const data = await api("/api/login", { method: "POST", body: { username, password } });
+  token = data.token; localStorage.setItem(TOKEN_KEY, token);
+  showMain(); await boot();
+}
+async function boot() {
+  try {
+    const me = await api("/api/me");
+    $("#whoami").textContent = "👤 " + me.username;
+    $("#globalInfo").textContent = `在服 ${me.users} 人 · 运行中 ${(me.running_users || []).length} 个任务`;
+    const cfg = await api("/api/config");
+    if (Object.keys(cfg).length) fillForm(cfg);
+    startPolling();
+  } catch (e) { showLogin(); }
+}
+
+/* ---------- 轮询状态与日志 ---------- */
+function startPolling() {
+  clearInterval(statusTimer); clearInterval(logTimer);
+  statusTimer = setInterval(pollStatus, 2000);
+  logTimer = setInterval(pollLogs, 1500);
+  pollStatus(); pollLogs();
+}
+async function pollStatus() {
+  try {
+    const st = await api("/api/status");
+    const run = st.running, s = st.stats;
+    const pill = $("#runState");
+    pill.textContent = "";
+    pill.className = "state-pill" + (run ? " running" : "");
+    const dot = document.createElement("span"); dot.className = "dot";
+    pill.appendChild(dot);
+    pill.appendChild(document.createTextNode(run ? " 抢课中" : " 未运行"));
+    $("#startBtn").disabled = run; $("#stopBtn").disabled = !run;
+    $("#stAttempts").textContent = s.attempts || 0;
+    $("#stSuccess").textContent = s.success || 0;
+    $("#stError").textContent = s.error || 0;
+    $("#stTime").textContent = s.started_at || "-";
+    $("#statText").textContent = (s.started_at ? `开始 ${s.started_at} · 停止 ${s.stopped_at || "-"}` : "")
+      + (s.last && s.last.body ? ` · 最近响应: ${s.last.body}` : "");
+  } catch (e) { }
+}
+async function pollLogs() {
+  try {
+    const d = await api("/api/logs?after=" + lastLogId);
+    const box = $("#logs");
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    const lvl = { info: "log-info", warn: "log-warn", error: "log-error", success: "log-success" };
+    (d.logs || []).forEach(l => {
+      const div = document.createElement("div");
+      div.className = "log-line " + (lvl[l.level] || "log-info");
+      div.innerHTML = `<span class="log-ts">${l.ts}</span>${l.msg}`;
+      box.appendChild(div);
+      if (l.id > lastLogId) lastLogId = l.id;
+    });
+    while (box.children.length > 900) box.removeChild(box.firstChild);
+    if (stick) box.scrollTop = box.scrollHeight;
+  } catch (e) { }
+}
+
+/* ---------- 按钮 ---------- */
+$("#saveBtn").onclick = async () => {
+  try { await api("/api/config", { method: "POST", body: readForm() }); showToast("配置已保存", "ok"); }
+  catch (e) { showToast("保存失败: " + e.message, "err"); }
+};
+$("#testBtn").onclick = async () => {
+  const btn = $("#testBtn"); btn.disabled = true; btn.textContent = "🔄 测试中...";
+  try {
+    const d = await api("/api/test", { method: "POST", body: readForm() });
+    showToast(`测试完成 HTTP ${d.status_code} · 判定${d.success_guess ? "成功" : "未成功"} · ${(d.body || d.error || "").slice(0, 150)}`, d.success_guess ? "ok" : "err");
+    await pollLogs();
+  } catch (e) { showToast("测试失败: " + e.message, "err"); }
+  btn.disabled = false; btn.textContent = "🧪 测试连接";
+};
+$("#startBtn").onclick = async () => {
+  try { await api("/api/start", { method: "POST", body: readForm() }); showToast("抢课任务已启动", "ok"); await pollStatus(); }
+  catch (e) { showToast("启动失败: " + e.message, "err"); }
+};
+$("#stopBtn").onclick = async () => {
+  try { await api("/api/stop", { method: "POST", body: {} }); showToast("已发送停止指令", "ok"); await pollStatus(); }
+  catch (e) { showToast(e.message, "err"); }
+};
+$("#logoutBtn").onclick = async () => {
+  try { await api("/api/logout", { method: "POST", body: {} }); } catch (e) { }
+  showLogin();
+};
+
+/* ---------- 登录视图 ---------- */
+$("#tabLogin").onclick = () => { $("#tabLogin").className = "active"; $("#tabReg").className = ""; $("#loginForm").style.display = "block"; $("#regForm").style.display = "none"; };
+$("#tabReg").onclick = () => { $("#tabReg").className = "active"; $("#tabLogin").className = ""; $("#regForm").style.display = "block"; $("#loginForm").style.display = "none"; };
+$("#loginForm").onsubmit = e => { e.preventDefault(); doLogin().catch(err => showToast("登录失败: " + err.message, "err")); };
+$("#regForm").onsubmit = e => { e.preventDefault(); doRegister().catch(err => showToast("注册失败: " + err.message, "err")); };
+
+/* ---------- 启动 ---------- */
+(async () => {
+  if (token) { showMain(); await boot(); } else { showLogin(); }
+})();
+</script>
+</body>
+</html>
