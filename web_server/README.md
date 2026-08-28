@@ -85,6 +85,98 @@ sudo systemctl enable --now qlu-server
 journalctl -u qlu-server -f   # 看日志
 ```
 
+### 方式三：校园网限制下的部署（frp 内网穿透）
+
+> **适用场景**：教务系统仅校园网可访问（例如齐鲁工大 `jw.qlu.edu.cn` 现在只在内网
+> 可达，校外需通过学校 VPN——深信服 aTrust——才能访问）。此时云服务器无法直连教务，
+> 需要把「抢课请求的出口」放到一台能访问教务的机器上，再用 frp 把服务穿回公网。
+
+```
+浏览器 ──▶ https://域名 → 公网服务器 nginx → 127.0.0.1:8010
+                                  └─ frps(7000) ←frp隧道← 校园机 frpc
+                                                         → 校园机 8010(本服务)
+                                                         → 校园网/学校VPN → jw.qlu.edu.cn ✅
+```
+
+#### 前置条件
+
+- 一台能访问教务的**常开电脑**：在校园网内，或装有学校 VPN 客户端（如 aTrust）并已登录
+- 一台有公网 IP 的服务器（跑 frps + nginx；域名可选，IP:8010 也能用）
+
+#### ① 公网服务器：跑 frps
+
+```bash
+cd /opt
+wget https://github.com/fatedier/frp/releases/download/v0.61.1/frp_0.61.1_linux_amd64.tar.gz
+tar xzf frp_0.61.1_linux_amd64.tar.gz && cd frp_0.61.1_linux_amd64
+
+cat > frps.toml <<'EOF'
+bindPort = 7000
+auth.method = "token"
+auth.token = "换成你自己的强密码"
+EOF
+
+nohup ./frps -c frps.toml > frps.log 2>&1 &
+```
+
+防火墙/安全组放行 **7000** 端口（仅 frp 认证用，别对公网开放其他多余端口）。
+
+#### ② 校园机：跑本服务 + frpc
+
+先确认这台电脑的浏览器能打开教务（校园网直连或已登录学校 VPN）。
+
+```powershell
+# 启动本服务
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\python app.py --host 127.0.0.1 --port 8010
+```
+
+下载 frpc（**版本必须与服务器端一致**）：
+`https://github.com/fatedier/frp/releases/download/v0.61.1/frp_0.61.1_windows_amd64.zip`
+
+`frpc.toml`：
+
+```toml
+serverAddr = "公网服务器IP"
+serverPort = 7000
+auth.token = "和 frps.toml 相同的强密码"
+
+[[proxies]]
+name = "qlu-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8010
+remotePort = 8010
+```
+
+```powershell
+.\frpc.exe -c frpc.toml
+```
+
+#### ③ 数据迁移
+
+数据跟着服务走：把旧服务器 `data/` 目录（`users.json` + `configs/`）复制到校园机的
+`web_server/data/`，老账号无需重新注册。
+
+#### ④ 验证
+
+```bash
+# 公网服务器上执行，200 说明隧道通了、页面实际从校园机发出
+curl -I http://127.0.0.1:8010/
+```
+
+浏览器打开 `https://你的域名`（nginx 反代 `http://127.0.0.1:8010`），老账号能登录即成功。
+
+#### 注意事项
+
+1. 校园机**禁止休眠**（电源设置 → 睡眠改为"从不"）；用任务计划程序设置开机自启
+   `frpc` 与本服务，aTrust 类 VPN 客户端开启自动登录/自动重连。
+2. aTrust 只有 Windows/macOS/移动端/统信·麒麟版客户端，**没有通用 Linux 版**，
+   云服务器无头安装不可行——这正是本方案存在的原因。
+3. 学校 VPN 是资源级放行：确认 `jw.qlu.edu.cn` 在资源列表里（平时能在校外打开
+   教务页面即说明已放行）。
+
 ## 安全建议（多人共用服务器必看）
 
 1. **公网/跨网段必须套 HTTPS**，否则 cookie 会在传输中被抓。推荐 Caddy 一行搞定：
