@@ -105,8 +105,13 @@ def _to_bool(v, default: bool) -> bool:
 
 def _normalize_config(cfg: dict, raise_on_missing: bool = False) -> dict:
     """清洗前端传来的配置，固定键与取值范围。"""
+    base_url = str(cfg.get("base_url") or "https://jw.qlu.edu.cn").strip().rstrip("/")
+    # Exact HTTPS origin only: rejects credentials, ports, queries and fragments
+    # before any URL concatenation or network request can occur.
+    if base_url != "https://jw.qlu.edu.cn":
+        raise HTTPException(400, "仅允许连接 https://jw.qlu.edu.cn")
     c = {
-        "base_url": str(cfg.get("base_url") or "https://jw.qlu.edu.cn").strip().rstrip("/"),
+        "base_url": base_url,
         "cookie": str(cfg.get("cookie") or "").strip(),
         "jxb_ids": str(cfg.get("jxb_ids") or "").strip(),
         "kch_id": str(cfg.get("kch_id") or "").strip(),
@@ -183,8 +188,15 @@ def is_success(obj) -> bool:
     return False
 
 
+class CourseSession(requests.Session):
+    def request(self, method, url, **kwargs):
+        kwargs["allow_redirects"] = False
+        return super().request(method, url, **kwargs)
+
+
 def _build_session(cfg: dict) -> requests.Session:
-    s = requests.Session()
+    s = CourseSession()
+    s.trust_env = False
     s.headers.update({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
         "Referer": cfg["base_url"] + "/jwglxt/xsxk/zzxkyzb_cxZzxkYzbIndex.html?gnmkdm=N253512",
@@ -369,6 +381,8 @@ def index():
 
 @app.post("/api/register")
 def api_register(body: dict):
+    if os.environ.get("QLU_ALLOW_REGISTRATION") != "1":
+        raise HTTPException(403, "注册已关闭，请联系管理员")
     username, password = _extract_creds(body)
     username = (username or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_]{2,20}", username):

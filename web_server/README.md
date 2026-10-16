@@ -31,7 +31,13 @@ python -m venv .venv
 .venv/bin/python app.py --host 0.0.0.0 --port 8000
 ```
 
-打开 `http://服务器IP:8000` → 注册第一个账号即可用。
+注册默认关闭。首次创建账号时，由管理员临时设置 `QLU_ALLOW_REGISTRATION=1` 启动服务，注册后移除该环境变量并重启。现有账号仍可登录。
+
+服务器只连接 `https://jw.qlu.edu.cn`，不接受自定义地址、路径、查询或片段，不跟随 HTTP 跳转，也不使用环境代理。保存的旧自定义地址需改回该地址。本地 mock 冒烟脚本中的回环地址会被拒绝；安全回归使用 mock Session，无需访问真实教务：
+
+```bash
+python -m unittest discover -s web_server/tests -p security_test.py
+```
 
 ## Linux 服务器部署
 
